@@ -11,7 +11,11 @@
 #define FILEXFER_OPTION     (0xABCDEF01)
 #define FILEXFER_POSTFIX    (0xFFDDEECC)
 
-#define FILEXFER_MAXSIZE    (64*1024*1024)
+#define FILEXFER_MAX_SIZE   (64*1024*1024)
+#define	FILEXFER_MAX_BLOCK	(64*1024)	
+
+#define FILEXFER_BLOCK_ACK		"ACK"
+#define FILEXFER_COMPLETE_ACK	"BYE"
 
 struct filexfer
 {
@@ -23,6 +27,8 @@ struct filexfer
     uint32_t    postfix;
 }   __attribute__((packed));
 
+
+// #define MIN(X,Y) ((X) < (Y) ? : (X) : (Y))
 
 void filexfer_setup(struct filexfer* xfer, char* filename, uint32_t length);
 void filexfer_print(struct filexfer* xfer);

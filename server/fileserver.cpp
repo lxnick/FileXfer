@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <pthread.h>
 
+#include <sys/stat.h>
 #include <ctype.h>
 
 #include "../include/filexfer.h"
@@ -40,21 +41,31 @@ int complete_send(int sock, uint8_t* buffer, int size )
 int complete_receive(int sock, uint8_t* buffer, int size)
 {
     int receive  = 0;
-        while( receive < size )
-        {
-                int count = recv(sock, buffer + receive, size - receive, 0 );
+	while( receive < size )
+    {
+		int count = recv(sock, buffer + receive, size - receive, 0 );
 
-                if (count <0 )
-                {
-                        printf("recv failed %d\r\n", count);
-                        return 0;
-                }
+		if ( count > 0 )
+		{
+            receive += count;
+			printf("%d of %d\r\n", count, receive );
+			continue;
+		}
 
-		printf("count = %d\r\n", count);
-                receive += count;
-        }
+        if (count < 0 )
+		{
+        	printf("recv failed %d, %s\r\n", count, strerror(count) );
+			return count;
+		}
 
-        return receive;
+        if (count == 0 )
+		{
+        	printf("recv failed %d\r\n", count );
+			return 0;
+		}
+	}
+
+	return receive;
 }
 
 // LinServer -p port-number
@@ -187,7 +198,6 @@ void* TCPfiled(void* lp)
 
     struct filexfer filexfer;
 	
-
     int headersize = complete_receive(fd,(uint8_t*) &filexfer, sizeof (struct filexfer)) ;
     if ( headersize != sizeof (struct filexfer) )
     {
@@ -215,7 +225,7 @@ void* TCPfiled(void* lp)
 
     uint32_t filesize = ntohl(filexfer.filelength);
 
-    if ( filesize > FILEXFER_MAXSIZE)
+    if ( filesize > FILEXFER_MAX_SIZE)
     {
         printf("filelength too big  %08x\r\n",  filesize );             
         return 0;
@@ -241,7 +251,32 @@ void* TCPfiled(void* lp)
     }
 #else
 
-	 received = complete_receive(fd, buffer,  filesize);
+	bool bLastBlock  = false;
+    while( received < filesize )
+    {
+		int data_to_receive = filesize - received;
+		int block_to_receive = MIN( FILEXFER_MAX_BLOCK,data_to_receive);
+		int data_received = complete_receive(fd, buffer + received, block_to_receive );
+
+		if ( data_received <= 0 )
+		{
+		    printf("Receive Failed\r\n");
+			free(buffer);
+			close(fd);
+			return 0;					
+		}
+
+		received += data_received;
+//		if (( received ==  filesize) && (data_receive == FILEXFER_MAX_BLOCK))
+//			 bLastBlock = true;
+		if ( received < filesize)
+		{
+//			char ACK[4] = "BYE";
+			complete_send(fd,(uint8_t*)(const char *) FILEXFER_BLOCK_ACK, 4);
+
+		}			
+
+	}	
 	 
    
 #endif

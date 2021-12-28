@@ -195,7 +195,8 @@ int main(int argc, char** argv)
     fread(buffer, 1, size, fd);
     fclose(fd);
 
-    
+
+#if 0    
 
     int sent = complete_send(hsock, buffer,size);
 	
@@ -221,8 +222,52 @@ int main(int argc, char** argv)
 	    printf("Sent success\n");
 
    }
+#else
 
+	int filesize = size; 
+   int sent = 0;	
 
+	while( sent < filesize )
+	{
+		int data_to_send = filesize - sent ;
+		int block_to_send = MIN(FILEXFER_MAX_BLOCK, data_to_send);
+		int data_sent = complete_send(hsock, buffer +sent, block_to_send);
+
+		if ( data_sent <= 0 )
+		{
+			printf("Receive Failed\r\n");
+			free(buffer);
+			return 0;
+		}	
+
+		sent +=  data_sent;
+		char ack[4];
+		memset(ack, 0, sizeof(ack));
+		int nack = 	complete_receive(hsock,(uint8_t*) & ack[0] , 4);
+
+		if ( nack == 4 )
+		{
+			if ( strcmp(ack, "BYE") == 0 )
+			{
+				if (  sent == filesize)
+					printf("Sent compolete\n");
+				else
+					printf("Sent not compolete\n");
+				break;
+			}
+			if ( strcmp(ack, "ACK") == 0 )
+			{
+				printf("More data to send \n");
+				continue;		
+			}
+		}
+
+		printf( "ACK Failed= %d,%s\r\n", nack, ack);
+		break;
+   }
+#endif
+
+	free( buffer);
     close(hsock);
 
 #endif    
