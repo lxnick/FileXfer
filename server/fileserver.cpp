@@ -12,6 +12,7 @@
 
 #include <sys/stat.h>
 #include <ctype.h>
+#include <time.h>
 
 #include "../include/filexfer.h"
 
@@ -48,7 +49,7 @@ int complete_receive(int sock, uint8_t* buffer, int size)
 		if ( count > 0 )
 		{
             receive += count;
-			printf("%d of %d\r\n", count, receive );
+//			printf("%d of %d\r\n", count, receive );
 			continue;
 		}
 
@@ -137,11 +138,11 @@ int main(int argc, char** argv)
     
     while(true)
 	{
-        printf("waiting for a connection\n");
+        printf("waiting for a connection\r\n");
         csock = (int*)malloc(sizeof(int));
         if((*csock = accept( hsock, (sockaddr*)&sadr, &addr_size))!= -1)
         {
-            printf("---------\nReceived connection from %s\n", inet_ntoa(sadr.sin_addr));
+            printf("-----Received connection from %s\r\n", inet_ntoa(sadr.sin_addr));
 //            pthread_create(&thread_id,0,&SocketHandler, (void*)csock );
             pthread_create(&thread_id,0,&TCPfiled, (void*)csock );
 
@@ -190,6 +191,7 @@ FINISH:
 
 void* TCPfiled(void* lp)
 {
+	static int index = 0;
 
     int *csock = (int*)lp;
     int fd = *csock;
@@ -197,6 +199,8 @@ void* TCPfiled(void* lp)
     free(csock);
 
     struct filexfer filexfer;
+
+	index ++;
 	
     int headersize = complete_receive(fd,(uint8_t*) &filexfer, sizeof (struct filexfer)) ;
     if ( headersize != sizeof (struct filexfer) )
@@ -211,17 +215,8 @@ void* TCPfiled(void* lp)
         return 0;
     }
 
-    printf("[T] receive file %s\r\n",  filexfer.filename);
-    printf("[T] receive size %d\r\n",  ntohl(filexfer.filelength));
+    printf("-----[%05d] receive file %s, size = %d\r\n",index, filexfer.filename, ntohl(filexfer.filelength) );
 	
-    FILE * pFile = fopen( filexfer.filename,"w" );
-
-    if( NULL == pFile )
-    {
-        printf( "Open File Failure %s\r\n", filexfer.filename);
-        return 0;
-    }
-
 
     uint32_t filesize = ntohl(filexfer.filelength);
 
@@ -235,21 +230,6 @@ void* TCPfiled(void* lp)
     memset(buffer, 0, filesize);
     uint32_t received = 0;
 
-#if 0
-    while( received < filesize )
-    {
-        int frame = filesize - received > 4096 ? 4096 : filesize - received;
-        int count = read(fd, buffer + received, frame);
-
-        if ( received == 0 && count > 0 )
-            printf("buffer= %02x,%02x,\r\n", buffer[0], buffer[1]);
-
-        if ( count <= 0)
-            break;
-
-        received += count;
-    }
-#else
 
 	bool bLastBlock  = false;
     while( received < filesize )
@@ -267,31 +247,40 @@ void* TCPfiled(void* lp)
 		}
 
 		received += data_received;
-//		if (( received ==  filesize) && (data_receive == FILEXFER_MAX_BLOCK))
-//			 bLastBlock = true;
 		if ( received < filesize)
 		{
-//			char ACK[4] = "BYE";
 			complete_send(fd,(uint8_t*)(const char *) FILEXFER_BLOCK_ACK, 4);
-
 		}			
 
 	}	
 	 
-   
-#endif
 
-    printf("Received %d\r\n", received);
+    printf("-----Received %d\r\n", received);
+
         
-    fwrite(buffer,1, received ,pFile);
-    fclose(pFile);
-
-    free( buffer);
 
 	char ACK[4] = "BYE";
 	complete_send(fd,(uint8_t*) &ACK[0], 4);
-    printf("DONE\r\n");
+
+	time_t t = time(NULL);
+	struct tm tm = *localtime(&t);	
+    printf("-----[%04d-%02d-%-2d %02d:%02d:%02d] Done \r\n",
+		tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
         
+
+    FILE * pFile = fopen( filexfer.filename,"w" );
+    if( NULL == pFile )
+    {
+        printf( "Open File Failure %s\r\n", filexfer.filename);
+        return 0;
+    }
+
+    fwrite(buffer,1, received ,pFile);
+    fclose(pFile);
+    free( buffer);
+
+    printf("-----Written\r\n");
+
     return 0;
 }
 
